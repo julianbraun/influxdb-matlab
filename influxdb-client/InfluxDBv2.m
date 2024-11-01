@@ -145,19 +145,72 @@ classdef InfluxDBv2 < handle
                 'KeyName', 'Authorization', 'KeyValue',['Token ' obj.Token]);
             webwrite(url, lines, opts);
         end
-        
+
         % Obtain a write builder
         function builder = writer(obj)
             builder = WriteBuilder().influxdb(obj);
         end
         
+        function deleteData(obj, startTime, stopTime, bucket, predicate)
+                % Deletes data from a given database bucket between startTime and stopTime
+                % Optionally filter with a predicate to delete specific points (based on tags/fields)
+    
+                % Validate inputs
+                if nargin < 3 || isempty(startTime) || isempty(stopTime)
+                 error('Start and stop times must be provided.');
+                end
+    
+                if nargin < 4 || isempty(bucket)
+                    bucket = obj.Database;  % Use the current database if none specified
+                end
+                
+                if nargin < 5 || isempty(predicate)
+                    predicate = '';  % Delete all data if no predicate is provided
+                end
+
+                % Convert startTime and stopTime to proper string format using TimeUtils
+                startTimeStr = datestr(startTime, 'yyyy-mm-ddTHH:MM:SSZ');  % Convert to ISO 8601/RFC3339 format
+                stopTimeStr = datestr(stopTime, 'yyyy-mm-ddTHH:MM:SSZ');
+
+                % Construct the delete URL and parameters
+                params = {['org=' urlencode(obj.Organization)],['bucket=' urlencode(bucket)]};
+                url = [obj.Url '/api/v2/delete?' strjoin(params, '&')];
+            
+                % Define the delete request body
+                data = struct;
+                data.start = startTimeStr;
+                data.stop = stopTimeStr;
+                if ~isempty(predicate)
+                    data.predicate = predicate;  % Predicate for filtering (optional)
+                end
+           
+                % Send the delete request
+                opts = weboptions('RequestMethod', 'post','MediaType', 'application/json','KeyName', 'Authorization', 'KeyValue', ['Token ' obj.Token]);
+                webwrite(url, data, opts);
+            
+                % fprintf('Data deleted from %s bucket between %s and %s.\n', bucket, startTime, stopTime);
+        end
+
+        function editData(obj, startTime, stopTime, bucket, predicate, series)
+
+            obj.deleteData(startTime, stopTime, bucket, predicate);
+
+            obj.writer().append(series).execute();
+        end
+
+        function explorer = explorer(obj, rootDir)
+            explorer = FolderExplorer().influxdb(obj);
+            explorer.traverseDirectory(rootDir);
+
+        end
+
         % Execute other queries or commands
         function result = runCommand(obj, command, varargin)
             idx = find(cellfun(@ischar, varargin), 1, 'first');
             database = iif(isempty(idx), '', varargin{idx});
             idx = find(cellfun(@islogical, varargin), 1, 'first');
             requiresPost = iif(isempty(idx), false, varargin{idx});          
-            
+
             if isempty(database)
                 params = {'q', command};
             else
