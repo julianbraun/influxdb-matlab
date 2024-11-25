@@ -1,4 +1,4 @@
-classdef InfluxDBv2 < handle
+classdef InfluxDBF < handle
     
     properties(Access = private)
         Url = ''
@@ -11,7 +11,7 @@ classdef InfluxDBv2 < handle
     
     methods
         % Constructor
-        function obj = InfluxDBv2(url, token, org, database)
+        function obj = InfluxDBF(url, token, org, database)
             obj.Url = url;
             obj.Token = token;
             obj.Organization = org;
@@ -190,31 +190,7 @@ classdef InfluxDBv2 < handle
                 'KeyName', 'Authorization', 'KeyValue',['Token ' obj.Token]);
             webwrite(url, lines, opts);
         end
-        
-        function writeDataToInfluxDB(url, bucket, org, token, measurement, tags, fields, timestamp)
-            % Construct the line protocol data
-            tagStr = '';
-            for k = 1:numel(tags)
-                tagStr = strcat(tagStr, ',', tags{k}.key, '=', tags{k}.value);
-            end
 
-            fieldStr = '';
-            for k = 1:numel(fields)
-                fieldStr = strcat(fieldStr, ',', fields{k}.key, '=', num2str(fields{k}.value));
-            end
-
-            lineProtocolData = strcat(measurement, tagStr, fieldStr, ' ', num2str(timestamp));
-
-            % Define the URL with parameters
-            endpoint = strcat(url, '/api/v2/write?org=', org, '&bucket=', bucket, '&precision=s');
-
-            % Set up the options for webwrite (HTTP POST)
-            options = weboptions('HeaderFields', {'Authorization', ['Token ', token]; 'Content-Type', 'text/plain'});
-
-            % Send the data
-            webwrite(endpoint, lineProtocolData, options);
-            disp('Data written to InfluxDB successfully.');
-        end
         % Obtain a write builder
         function builder = writer(obj)
             builder = WriteBuilder().influxdb(obj);
