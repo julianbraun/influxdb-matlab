@@ -237,8 +237,8 @@ classdef InfluxDBv2 < handle
                     predicate = '';  % Delete all data if no predicate is provided
                 end
 
-                % Convert startTime and stopTime to proper string format using TimeUtils
-                startTimeStr = datestr(startTime, 'yyyy-mm-ddTHH:MM:SSZ');  % Convert to ISO 8601/RFC3339 format
+                % Convert startTime and stopTime to ISO 8601/RFC3339 format used by InfluxDB
+                startTimeStr = datestr(startTime, 'yyyy-mm-ddTHH:MM:SSZ'); 
                 stopTimeStr = datestr(stopTime, 'yyyy-mm-ddTHH:MM:SSZ');
 
                 % Construct the delete URL and parameters
