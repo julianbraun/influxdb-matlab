@@ -16,6 +16,7 @@ classdef InfluxDBF < handle
             obj.Token = token;
             obj.Organization = org;
             obj.use(database);
+            obj.Database = database;
         end
         
         % Set the read timeout
@@ -108,38 +109,28 @@ classdef InfluxDBF < handle
             result = QueryResult.from(response, epoch);
         end
         
-        function result = runFluxQuery(obj, query, database, epoch)
-            if nargin < 3 || isempty(database)
-                database = obj.Database;
+        function result = runQueryFlux(obj, fluxQuery, url, org, token)
+            if nargin < 3 || isempty(url)
+                url = obj.Url;
             end
-            if nargin < 4 || isempty(epoch)
-                epoch = 'ms';
-            else
-                TimeUtils.validateEpoch(epoch);
+            if nargin < 4 || isempty(org)
+                org = obj.Organization;
             end
-            if iscell(query)
-                query = strjoin(query, ';');
+            if nargin < 5 || isempty(token)
+                token = obj.Token;
             end
-            % Validate required properties
-            assert(~isempty(obj.Url), 'InfluxDB URL is not set');
-            assert(~isempty(obj.Token), 'Authorization token is not set');
+            % Define the URL for the query
+            endpoint = strcat(url, '/api/v2/query?org=', org);
 
-            % Prepare the HTTP request for Flux
-            url = [obj.Url '/api/v2/query'];
-            opts = weboptions('Timeout', obj.ReadTimeout, ...
-                'HeaderFields', {'Authorization', ['Token ' obj.Token], ...
-                'Content-Type', 'application/vnd.flux'});
+            % Set up the options for webread (HTTP POST)
+            options = weboptions('HeaderFields', {'Authorization', ['Token ', token]; 'Accept', 'application/csv'}, 'MediaType', 'application/json');
 
-            % Body of the request for Flux
-            body = struct('query', query);
+            % Prepare query as a structure
+            body = struct('query', fluxQuery);
 
-            % Send the request
-            try
-                response = webwrite(url, body, opts);
-                result = FluxQueryResult.from(response); % Assume FluxQueryResult handles response parsing
-            catch e
-                error('Failed to execute Flux query: %s', e.message);
-            end
+            % Send the query
+            result = webwrite(endpoint, body, options);
+
         end
 
         % Obtain a query builder
@@ -154,19 +145,17 @@ classdef InfluxDBF < handle
         end
 
         % Obtain a flux query builder
-        function builder = fluxQuery(obj, varargin)
-            if nargin > 2
-                builder = FluxQueryBuilder().series(varargin).influxdb(obj);
-            elseif nargin > 1
-                builder = FluxQueryBuilder().series(varargin{1}).influxdb(obj);
-            else
-                builder = FluxQueryBuilder().influxdb(obj);
+        function builder = fluxQuery(obj, bucket)
+            % Check if the bucket is provided or default to obj.Database
+            if nargin < 2 || isempty(bucket)
+                assert(~isempty(obj.Database), 'Database property is not set');
+                bucket = obj.Database;
             end
-        end        
-        
+            builder = FluxQueryBuilder(bucket).influxdb(obj);
+        end
+
         % Execute a write of a line protocol string
         function [] = runWrite(obj, lines, database, precision, retention, consistency)
-            lines
             params = {};
             if nargin > 2 && ~isempty(database)
                 params{end + 1} = ['db=' urlencode(database)];
@@ -213,7 +202,7 @@ classdef InfluxDBF < handle
                     predicate = '';  % Delete all data if no predicate is provided
                 end
 
-                % Convert startTime and stopTime to proper string format using TimeUtils
+                % Convert startTime and stopTime to proper string format
                 startTimeStr = datestr(startTime, 'yyyy-mm-ddTHH:MM:SSZ');  % Convert to ISO 8601/RFC3339 format
                 stopTimeStr = datestr(stopTime, 'yyyy-mm-ddTHH:MM:SSZ');
 
@@ -233,7 +222,7 @@ classdef InfluxDBF < handle
                 opts = weboptions('RequestMethod', 'post','MediaType', 'application/json','KeyName', 'Authorization', 'KeyValue', ['Token ' obj.Token]);
                 webwrite(url, data, opts);
             
-                % fprintf('Data deleted from %s bucket between %s and %s.\n', bucket, startTime, stopTime);
+                fprintf('Data deleted from %s bucket between %s and %s.\n', bucket, startTime, stopTime);
         end
 
         function editData(obj, startTime, stopTime, bucket, predicate, series)
