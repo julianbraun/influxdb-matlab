@@ -106,35 +106,40 @@ classdef Series < handle
             
             % Create a line for each sample
             measurement = Series.safeMeasurement(obj.Name);
-            prefix = [strjoin([{measurement}, obj.Tags], ',') ' '];
-            
-            builder = '';
-            for i = 1:field_lengths
-                values = '';
-                for f = 1:length(obj.Fields)
-                    field = obj.Fields{f};
-                    name = Series.safeKey(field.key);
-                    value = field.value;
-                    if iscell(value)
-                        str = obj.fieldFmt(name, value{i});
-                    else
-                        str = obj.fieldFmt(name, value(i));
-                    end
-                    if ~isempty(str)
-                        values = [values, str, ','];
-                    end
-                end
-                if ~isempty(values)
-                    values = values(1:end-1);
-                    if time_length > 0
-                        time = sprintf(' %i', timestamp(i));
-                        builder = [builder, prefix, values, time, newline];
-                    else
-                        builder = [builder, prefix, values, newline];
-                    end
-                end
-            end
-            lines = iif(isempty(builder), '', builder(1:end-1));
+            prefix = strjoin([{measurement}, obj.Tags], ',');
+
+            % Change all values into strings and put them into a cells
+            % Everything but numbers needs quotation marks
+            cells = cellfun(@(x) iscell(x.value), obj.Fields);
+            values = cell(size(cells));
+            values(~cells) = cellfun(@(x) string(x.value), obj.Fields(~cells),'UniformOutput',false);
+            values(cells) = cellfun(@(x) append("*!*", string(x.value), "*!*"), obj.Fields(cells),'UniformOutput',false);
+
+            % Get the values into a matrix for better handling
+            values = cat(2,struct('sx', values).sx);
+            % Assign empty values to strings accordingly
+            values(values == '*!**!*') = missing;
+            % Replace unauthorized expressions
+            values = Series.safeValue(values);
+
+            % Change all keys into a string array and replace unauthorized
+            % expressions
+            keys = Series.safeValue(string(cellfun(@(x) x.key, obj.Fields,'UniformOutput',false)));
+
+            % Write the keys before the according values
+            lines = append(keys, "=", values);
+            % Change missing values to empty strings
+            lines(ismissing(lines)) = "";
+            % Combine all key value pairs of one timestep to one line
+            lines = join(lines, ',');
+            % Use regexprep to replace multiple commas with a single comma
+            lines = regexprep(lines, ',{2,}', ',');
+            % Add the prefix and timestep to the key value pairs
+            lines = append(prefix, " ", lines, " ", string(timestamp));
+            % combine all separate lines to one long char
+            lines = char(join(lines.', newline));
+            % Change the placeholders to quotation marks
+            lines = replace(lines, '*!*', '"');
         end
     end
     
