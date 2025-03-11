@@ -177,7 +177,11 @@ classdef InfluxDBF < handle
             url = [obj.Url '/write?' strjoin(params, '&')];
             opts = weboptions('Timeout', obj.WriteTimeout, ...
                 'KeyName', 'Authorization', 'KeyValue',['Token ' obj.Token]);
+            try
             webwrite(url, lines, opts);
+            catch
+                warning('problem in webwrite')
+            end
         end
 
         % Obtain a write builder
